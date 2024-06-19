@@ -1,43 +1,54 @@
 import React from 'react';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-// import Home from './tabs/Home/Home';
-// import Account from './tabs/Account';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Text } from 'react-native';
 import Account from './Tabs/Account';
 import Stats from './Tabs/Stats';
 import Home from './Tabs/Home';
-import { MaterialIcons } from '@expo/vector-icons';
-import { Entypo } from '@expo/vector-icons';
+import { MaterialIcons, Entypo } from '@expo/vector-icons';
 import EStyleSheet from 'react-native-extended-stylesheet';
 
-const {Navigator, Screen} = createBottomTabNavigator();
+const Tab = createBottomTabNavigator();
 
 const Tabs = () => {
   return (
-    <Navigator
-      screenOptions={({route}) => ({
-        tabBarIcon: ({color}) => {
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ color, size }) => {
           switch (route.name) {
-            case Account.name:
-              return <MaterialIcons name="account-circle" size={24} color="black" />;
-            case Stats.name:
-              return <MaterialIcons name="query-stats" size={24} color="black" />;
+            case 'Home':
+              return <Entypo name="shop" size={size} color={color} />;
+            case 'Statistiques':
+              return <MaterialIcons name="query-stats" size={size} color={color} />;
+            case 'Compte':
+              return <MaterialIcons name="account-circle" size={size} color={color} />;
             default:
-                return <Entypo name="shop" size={24} color="black" />;
+              return <Entypo name="shop" size={size} color={color} />;
           }
         },
+        tabBarActiveTintColor: '#53B175',
+        tabBarInactiveTintColor: '#181725',
+        tabBarLabelStyle: style.tabBarLabelStyle,
       })}
-      tabBarOptions={{
-        activeTintColor: '#53B175',
-        inactiveTintColor: '#181725',
-        labelStyle: style.tabBarLabelStyle,
-      }}>
-      <Screen name="Home" component={Home} />
-      <Screen name="Stats" component={Stats} />
-      <Screen name="Account" component={Account} /> 
-    </Navigator>
+    >
+      <Tab.Screen
+        name="Mes produits"
+        component={Home}
+        options={{ tabBarLabel: ({ color }) => <Text style={[style.tabBarLabelStyle, { color }]}>Produits</Text> }}
+      />
+      <Tab.Screen
+        name="Statistiques"
+        component={Stats}
+        options={{ tabBarLabel: ({ color }) => <Text style={[style.tabBarLabelStyle, { color }]}>Statistiques</Text> }}
+      />
+      <Tab.Screen
+        name="Compte"
+        component={Account}
+        options={{ tabBarLabel: ({ color }) => <Text style={[style.tabBarLabelStyle, { color }]}>Compte</Text> }}
+      />
+    </Tab.Navigator>
   );
 };
-
+ 
 const style = EStyleSheet.create({
   tabBarLabelStyle: {
     fontFamily: '$gilroyNormal600',

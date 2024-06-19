@@ -21,46 +21,38 @@ const Login = ({ navigation }) => {
   const [isPasswordShown, setIsPasswordShown] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [idtab, setIdtab] = useState("");
-  const [token, setToken] = useState("");
   const handleLogin = async () => {
-    console.log(config.ip);
-    const ip = config.ip;
     try {
-      const response = await fetch(`https://10.233.219.18/magento2/pub/rest/all/V1/integration/admin/token`, {
+      const response = await fetch(`http://10.233.219.18/magento2/pub/rest/all/V1/integration/admin/token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
-          password,
+          username: email,
+          password: password,
         }),
       });
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Login failed");
       }
-
-      const { token, user } = await response.json();
-      setRole(user.role);
+  
+      const data = await response.json();
+      const token = data; // assuming the response contains only the token
       setEmail("");
       setPassword("");
-
-      
-      await AsyncStorage.setItem("user", user.fullName);
-      navigation.reset({
-        index: 0,
-        routes: [
-          { name: "Tabs" },
-        ],
-      });
+  
+      await AsyncStorage.setItem("userToken", token); // Store token in AsyncStorage
+      navigation.navigate("Tabs"); // Navigate to the "Tabs" screen
     } catch (error) {
       console.error("Login error:", error.message);
       Alert.alert("Error", "Invalid credentials. Please try again.");
     }
   };
-
+  
+  
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.white }}>
@@ -94,7 +86,7 @@ const Login = ({ navigation }) => {
                   marginVertical: 8,
                 }}
               >
-                Address Email
+                Nom d'utilisateur
               </Text>
 
               <View
@@ -110,7 +102,7 @@ const Login = ({ navigation }) => {
                 }}
               >
                 <TextInput
-                  placeholder="Enter your email address"
+                  placeholder="Enter votre nom d'utilisateur"
                   placeholderTextColor={COLORS.black}
                   keyboardType="email-address"
                   style={{
@@ -146,7 +138,7 @@ const Login = ({ navigation }) => {
                 }}
               >
                 <TextInput
-                  placeholder="Enter your password"
+                  placeholder="Entrer votre mot de pass"
                   placeholderTextColor={COLORS.black}
                   secureTextEntry={isPasswordShown}
                   style={{

@@ -1,9 +1,12 @@
-import React, { PureComponent } from 'react'
+import React, { PureComponent } from 'react';
+import { View, Text } from 'react-native';
 
 export default class Stats extends PureComponent {
   render() {
     return (
-      <div>Stats</div>
-    )
+      <View>
+        <Text>Stats</Text>
+      </View>
+    );
   }
 }
