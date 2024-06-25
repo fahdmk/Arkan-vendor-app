@@ -21,9 +21,9 @@ const Login = ({ navigation }) => {
   const [isPasswordShown, setIsPasswordShown] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const handleLogin = async () => {
+   const handleLogin = async () => {
     try {
-      const response = await fetch(`http://10.233.219.18/magento2/pub/rest/all/V1/integration/admin/token`, {
+      const response = await fetch(`http://10.233.219.18/magento2/pub/rest/all/V1/integration/customer/token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -33,24 +33,25 @@ const Login = ({ navigation }) => {
           password: password,
         }),
       });
-  
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Login failed");
       }
-  
-      const data = await response.json();
-      const token = data; // assuming the response contains only the token
+
+      const token = await response.json();
       setEmail("");
       setPassword("");
-  
-      await AsyncStorage.setItem("userToken", token); // Store token in AsyncStorage
-      navigation.navigate("Tabs"); // Navigate to the "Tabs" screen
+
+      await AsyncStorage.setItem("userToken", token);
+      console.log(token);
+      navigation.navigate("Tabs", { token });
     } catch (error) {
       console.error("Login error:", error.message);
       Alert.alert("Error", "Invalid credentials. Please try again.");
     }
   };
+
   
   
   return (

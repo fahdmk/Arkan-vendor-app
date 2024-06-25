@@ -9,7 +9,9 @@ import EStyleSheet from 'react-native-extended-stylesheet';
 
 const Tab = createBottomTabNavigator();
 
-const Tabs = () => {
+const Tabs = ({ route }) => {
+  const { token } = route.params;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -33,16 +35,19 @@ const Tabs = () => {
       <Tab.Screen
         name="Mes produits"
         component={Home}
+        initialParams={{ token }} 
         options={{ tabBarLabel: ({ color }) => <Text style={[style.tabBarLabelStyle, { color }]}>Produits</Text> }}
       />
       <Tab.Screen
         name="Statistiques"
         component={Stats}
+        initialParams={{ token }} 
         options={{ tabBarLabel: ({ color }) => <Text style={[style.tabBarLabelStyle, { color }]}>Statistiques</Text> }}
       />
       <Tab.Screen
         name="Compte"
         component={Account}
+        initialParams={{ token }} 
         options={{ tabBarLabel: ({ color }) => <Text style={[style.tabBarLabelStyle, { color }]}>Compte</Text> }}
       />
     </Tab.Navigator>
