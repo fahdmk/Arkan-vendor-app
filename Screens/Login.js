@@ -28,10 +28,16 @@ const Login = ({ navigation }) => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          username: email,
-          password: password,
-        }),
+        body: JSON.stringify(
+          {
+            username: "contact@stgegroup.com.tn",
+            password: "92664830"
+          }
+        //   {
+        //   username: email,
+        //   password: password,
+        // }
+      ),
       });
 
       if (!response.ok) {
@@ -44,7 +50,6 @@ const Login = ({ navigation }) => {
       setPassword("");
 
       await AsyncStorage.setItem("userToken", token);
-      console.log(token);
       navigation.navigate("Tabs", { token });
     } catch (error) {
       console.error("Login error:", error.message);
