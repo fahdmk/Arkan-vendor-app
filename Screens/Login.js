@@ -21,42 +21,55 @@ const Login = ({ navigation }) => {
   const [isPasswordShown, setIsPasswordShown] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-   const handleLogin = async () => {
+  const handleLogin = async () => {
     try {
-      const response = await fetch(`http://10.233.219.18/magento2/pub/rest/all/V1/integration/customer/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-          {
+      const response = await fetch(
+        `http://10.233.219.18/magento2/pub/rest/all/V1/integration/customer/token`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
             username: "contact@stgegroup.com.tn",
-            password: "92664830"
-          }
-        //   {
-        //   username: email,
-        //   password: password,
-        // }
-      ),
-      });
-
-      if (!response.ok) {
+            password: "92664830",
+          }),
+        }
+      );
+  
+      const response1 = await fetch(
+        `http://10.233.219.18/magento2/pub/rest/all/V1/integration/admin/token`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: "stage",
+            password: "admin123",
+          }),
+        }
+      );
+      if (!response.ok || !response1.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Login failed");
+        throw new Error(errorData.message || "Login failed");
       }
-
+  
       const token = await response.json();
-      setEmail("");
-      setPassword("");
-
-      await AsyncStorage.setItem("userToken", token);
-      navigation.navigate("Tabs", { token });
+      const tokena = await response1.json();
+  
+      // Store tokens in AsyncStorage
+      await AsyncStorage.setItem("userToken", JSON.stringify(token));
+      await AsyncStorage.setItem("adminToken", JSON.stringify(tokena));
+  
+      // Navigate to Tabs screen with both tokens
+      navigation.navigate("Tabs", { token, tokena });
     } catch (error) {
       console.error("Login error:", error.message);
       Alert.alert("Error", "Invalid credentials. Please try again.");
     }
   };
-
+  
   
   
   return (

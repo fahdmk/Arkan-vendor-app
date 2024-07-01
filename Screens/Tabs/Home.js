@@ -5,22 +5,22 @@ import {
   FlatList,
   Image,
   StyleSheet,
-  Switch,
   TouchableOpacity,
   TextInput,
+  ScrollView,
 } from "react-native";
 import {
   Card,
   Title,
   Paragraph,
-  Button,
   IconButton,
   ActivityIndicator,
 } from "react-native-paper";
 import Modal from "react-native-modal";
+import { Dropdown } from "react-native-element-dropdown";
 
 const Home = ({ route }) => {
-  const { token } = route.params;
+  const { token, tokena } = route.params;
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -32,46 +32,82 @@ const Home = ({ route }) => {
   const [isFetching, setIsFetching] = useState(false);
   const flatListRef = useRef(null);
   const [isInStock, setIsInStock] = useState(null);
+  const [isFocus, setIsFocus] = useState(false);
+  const [seller_id, setSellerID] = useState();
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch(
-          "http://10.233.219.18/magento2/pub/rest/V1/mpapi/sellers/me/product",
+        const sellerResponse = await fetch(`http://10.233.219.18/magento2/pub/rest/V1/mpapi/sellers/me`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+  
+        if (!sellerResponse.ok) {
+          throw new Error("Failed to fetch seller information");
+        }
+  
+        const seller = await sellerResponse.json();
+        const sellerId = seller.items[0].seller_id;
+        setSellerID(sellerId);
+  
+        const productResponse = await fetch(
+          `http://10.233.219.18/magento2/pub/rest/V1/mpapi/admin/sellers/${sellerId}/product`,
           {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${tokena}`,
             },
           }
         );
-        if (!response.ok) {
+  
+        if (!productResponse.ok) {
           throw new Error("Failed to fetch products");
         }
-
-        const data = await response.json();
-        if (data.length > 0) {
-          setProducts(data[0].items);
-          setModalVisibleArray(Array(data[0].items.length).fill(false));
-          data[0].items
-            .slice(0, visibleProducts)
-            .forEach((item) => fetchAdditionalData(item.sku, token));
-        }
+  
+        const productData = await productResponse.json();
+        const sellerData = productData.search_criteria.filter_groups[0].filters[0].value;
+        const productIds = sellerData.split(',');
+  
+        const productDetailsPromises = productIds.map(id => fetchAdditionalData(id, tokena));
+        const productsData = await Promise.all(productDetailsPromises);
+  
+        setProducts(productsData);
+        setLoading(false);
       } catch (error) {
         setError(error.message);
-      } finally {
         setLoading(false);
       }
     };
-
+  
     fetchProducts();
-  }, [token]);
-
-  const fetchAdditionalData = async (sku, token) => {
+  }, [token, tokena]);
+  
+  const fetchAdditionalData = async (id, tokena ,token) => {
     try {
-      const productResponse = fetch(
-        `http://10.233.219.18/magento2/pub/rest/all/V1/products/${sku}`,
+      const productResponse = await fetch(
+        `http://10.233.219.18/magento2/pub/rest/all/V1/products?searchCriteria%5BfilterGroups%5D%5B0%5D%5Bfilters%5D%5B0%5D%5Bfield%5D=entity_id&searchCriteria%5BfilterGroups%5D%5B0%5D%5Bfilters%5D%5B0%5D%5Bvalue%5D=${id}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${tokena}`,
+          },
+        }
+      );
+  
+      if (!productResponse.ok) {
+        throw new Error(`Failed to fetch additional data for id: ${id}`);
+      }
+  
+      const productData = await productResponse.json();
+   console.log(productData.items[0].sku) 
+      const stockResponse = await fetch(
+        `http://10.233.219.18/magento2/pub/rest/all/V1/stockStatuses/${productData.items[0].sku}`,
         {
           method: "GET",
           headers: {
@@ -80,56 +116,30 @@ const Home = ({ route }) => {
           },
         }
       );
-
-      const stockResponse = fetch(
-        `http://10.233.219.18/magento2/pub/rest/all/V1/stockStatuses/${sku}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const [productData, stockData] = await Promise.all([
-        productResponse,
-        stockResponse,
-      ]);
-
-      if (!productData.ok) {
-        throw new Error(`Failed to fetch additional data for SKU: ${sku}`);
+  
+      if (!stockResponse.ok) {
+        throw new Error(`Failed to fetch stock data for SKU: ${productData.items[0].sku}`);
       }
-
-      if (!stockData.ok) {
-        throw new Error(`Failed to fetch stock data for SKU: ${sku}`);
-      }
-
-      const productJson = await productData.json();
-      const stockJson = await stockData.json();
-
-      setProducts((prevProducts) =>
-        prevProducts.map((product) =>
-          product.sku === sku
-            ? { ...product, additionalData: productJson, stockData: stockJson }
-            : product
-        )
-      );
+  
+      const stockData = await stockResponse.json();
+  
+      return { sku: productData.items[0].sku, additionalData: productData ,stockData: stockData};
     } catch (error) {
       console.error(error);
+      return null;
     }
   };
+  
 
   const extractImageUrl = (product) => {
     if (!product.additionalData || !product.additionalData) {
       return null;
     }
-
-    const imageAttribute = product.additionalData.custom_attributes.find(
+    const imageAttribute = product.additionalData.items[0].custom_attributes.find(
       (attr) => attr.attribute_code === "image"
     );
     return imageAttribute
-      ? `https://arkan.tn/media/catalog/product${imageAttribute.value}`
+      ? `http://10.233.219.18/magento2/pub/media/catalog/product${imageAttribute.value}`
       : null;
   };
 
@@ -147,13 +157,12 @@ const Home = ({ route }) => {
             product: {
               sku: item.sku,
               price: parseFloat(modalPrice) || item.price,
-              // short_description:parseFloat(shortdesc)|| item.short_description,
               extension_attributes: {
                 stock_item: {
                   manage_stock: 1,
                   use_config_manage_stock: 1,
                   qty: parseInt(modalQuantity) || item.stockData.qty,
-                  is_in_stock: currentIsInStock,
+                  is_in_stock: currentIsInStock || isInStock,
                 },
                 category_links: [],
               },
@@ -163,7 +172,6 @@ const Home = ({ route }) => {
       );
       const responseData = await response.json();
 
-      console.log(responseData);
 
       if (!response.ok) {
         throw new Error(`Failed to update product: ${response.status}`);
@@ -174,6 +182,7 @@ const Home = ({ route }) => {
       console.error(error);
     }
   };
+
   const handlePriceChange = (value) => {
     setModalPrice(value);
   };
@@ -200,6 +209,7 @@ const Home = ({ route }) => {
       setModalName(item.name);
     }
   };
+
   const loadMoreProducts = useCallback(async () => {
     if (isFetching) return;
 
@@ -213,7 +223,8 @@ const Home = ({ route }) => {
       );
 
       const additionalDataPromises = productsToLoad.map((item) =>
-        fetchAdditionalData(item.sku, token)
+        fetchAdditionalData(item.id, token)
+     
       );
       await Promise.all(additionalDataPromises);
       setVisibleProducts((prevVisibleProducts) => prevVisibleProducts + 10);
@@ -229,6 +240,7 @@ const Home = ({ route }) => {
       return null;
     }
   };
+
   const handleScroll = (event) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
     const isCloseToBottom =
@@ -245,6 +257,8 @@ const Home = ({ route }) => {
     padding: 2,
     borderRadius: 25,
     textAlign: "center",
+    color: "white",
+    width: 100,
   });
 
   if (loading) {
@@ -258,12 +272,13 @@ const Home = ({ route }) => {
       </View>
     );
   }
+
   return (
     <View style={styles.container}>
       <FlatList
         ref={flatListRef}
         data={products.slice(0, visibleProducts)}
-        keyExtractor={(item) => item.mageproduct_id}
+        keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => {
           const imageUrl = extractImageUrl(item);
           const isInStock = item.stockData
@@ -272,140 +287,115 @@ const Home = ({ route }) => {
           return (
             <>
               <Modal isVisible={modalVisibleArray[index]}>
-                <View style={styles.modalContent}>
-                  <Text style={styles.text}>{item.name}</Text>
-                  <Text
-                    style={{
-                      alignSelf: "flex-start",
-                      paddingLeft: "10%",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Prix
-                  </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Price"
-                    value={modalPrice}
-                    onChangeText={handlePriceChange}
-                    keyboardType="numeric"
-                  />
-                  <Text
-                    style={{
-                      alignSelf: "flex-start",
-                      paddingLeft: "10%",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Quantité
-                  </Text>
-
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Quantity"
-                    value={modalQuantity}
-                    onChangeText={handleQuantityChange}
-                    keyboardType="numeric"
-                  />
-                  <Text
-                    style={{
-                      alignSelf: "flex-start",
-                      paddingLeft: "10%",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Nom
-                  </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Name"
-                    value={modalName}
-                    onChangeText={handleNameChange}
-                  />
-                  <View style={styles.switchContainer}>
-                    <Text>In Stock:</Text>
-                    <Switch value={isInStock} onValueChange={setIsInStock} />
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.modalButton,
-                      { backgroundColor: "lightgreen" },
-                    ]}
-                    onPress={() => handleUpdate(item, isInStock)}
-                  >
-                    <Text style={styles.modalButtonText}>Sauvegarder</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.modalButton, { backgroundColor: "grey" }]}
-                    onPress={() => {
-                      toggleModal(index);
-                      console.log(
-                        item.additionalData.custom_attributes.find(item => item.attribute_code === "short_description").value
-                      );
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.modalButtonText,
-                        { color: "white", fontWeight: "bold" },
+                <View style={styles.modalContainer}>
+                  <ScrollView contentContainerStyle={styles.scrollContainer}>
+                    <Text style={styles.modalTitle}>{item.name}</Text>
+                    <Text style={styles.label}>Prix</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Price"
+                      value={modalPrice}
+                      onChangeText={handlePriceChange}
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.label}>Quantité</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Quantity"
+                      value={modalQuantity}
+                      onChangeText={handleQuantityChange}
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.label}>Nom</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Name"
+                      value={modalName}
+                      onChangeText={handleNameChange}
+                    />
+                    <Text style={styles.label}>Status du Stock</Text>
+                    <Dropdown
+                      style={styles.dropdown}
+                      data={[
+                        { label: "On stock", value: true },
+                        { label: "Hors Stock", value: false },
                       ]}
-                    >
-                      Fermer
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </Modal>
-              <TouchableOpacity
-                key={item.id}
-                style={styles.productCard}
-                onPress={() => {}}
-              >
-                <Card style={styles.card}>
-                  <Title style={styles.productTitle}>{item.name}</Title>
-                  <View style={styles.productContent}>
-                    <Image
-                      source={{ uri: extractImageUrl(item) }}
-                      style={styles.productImage}
+                      maxHeight={300}
+                      labelField="label"
+                      valueField="value"
+                      placeholder={!isFocus ? "Sélectionner" : "..."}
+                      searchPlaceholder="Rechercher..."
+                      value={isInStock}
+                      onFocus={() => setIsFocus(true)}
+                      onBlur={() => setIsFocus(false)}
+                      onChange={(item) => {
+                        setIsInStock(item.value);
+                        setIsFocus(false);
+                      }}
                     />
-                    <View style={styles.separator} />
-                    <View style={styles.productInfo}>
-                      <Paragraph style={styles.productDetails}>
-                        Identifiant:{" "}
-                        {item.additionalData ? item.additionalData.id : "N/A"}
-                      </Paragraph>
-                      <Paragraph style={styles.productDetails}>
-                        Prix:{" "}
-                        {item.additionalData
-                          ? item.additionalData.price
-                          : "N/A"}{" "}
-                        TND
-                      </Paragraph>
-                      <Paragraph style={styles.productDetails}>
-                        Stock: {item.stockData ? item.stockData.qty : "N/A"}
-                      </Paragraph>
-                      <Paragraph
-                        style={[styles.stock, getStatusStyle(isInStock)]}
+                    <View style={styles.buttonContainer}>
+                      <TouchableOpacity
+                        style={[styles.button, styles.saveButton]}
+                        onPress={() => handleUpdate(item, isInStock)}
                       >
-                        {isInStock ? "on stock" : "Hors Stock"}
-                      </Paragraph>
+                        <Text style={styles.buttonText}>Sauvegarder</Text>
+                      </TouchableOpacity>
+                      
                     </View>
+                    <TouchableOpacity
+                        style={[styles.button, styles.cancelButton]}
+                        onPress={() => toggleModal(index)}
+                      >
+                        <Text style={[styles.buttonText, { color: "white" }]}>
+                          Fermer
+                        </Text> 
+                      </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              </Modal> 
+
+              <Card style={styles.card}>
+                <Title style={styles.productTitle}>{item.additionalData.items[0].name}</Title>
+                <View style={styles.productContent}>
+                  <Image
+                    source={{ uri: extractImageUrl(item) }}
+                    style={styles.productImage}
+                  />
+                  <View style={styles.separator} />
+                  <View style={styles.productInfo}>
+                    <Paragraph style={styles.productDetails}>
+                      Identifiant:{" "}
+                      {item.additionalData ? item.additionalData.items[0].id : "N/A"}
+                    </Paragraph>
+                    <Paragraph style={styles.productDetails}>
+                      Prix:{" "}
+                      {item.additionalData ? item.additionalData.items[0].price : "N/A"}{" "}
+                      TND
+                    </Paragraph>
+                    <Paragraph style={styles.productDetails}>
+                      Stock: {item.stockData ? item.stockData.qty : "N/A"}
+                    </Paragraph>
+                    <Paragraph style={[styles.stock, getStatusStyle(isInStock)]}>
+                      {isInStock ? "On stock" : "Hors Stock"}
+                    </Paragraph>
+                    
                   </View>
-                  <View style={styles.actions}>
-                    <IconButton
-                      icon="pencil"
-                      color="#007bff"
-                      size={20}
-                      onPress={() => toggleModal(index)}
-                    />
-                    <IconButton
-                      icon="delete"
-                      color="#f44336"
-                      size={20}
-                      onPress={() => {}}
-                    />
-                  </View>
-                </Card>
-              </TouchableOpacity>
+                </View>
+                <View style={styles.actions}>
+                  <IconButton
+                    icon="pencil"
+                    color="#007bff"
+                    size={20}
+                    onPress={() => toggleModal(index)}
+                  />
+                  <IconButton
+                    icon="delete"
+                    color="#f44336"
+                    size={20}
+                    onPress={() => {}}
+                  />
+                </View>
+              </Card>
             </>
           );
         }}
@@ -419,60 +409,10 @@ const Home = ({ route }) => {
 };
 
 const styles = StyleSheet.create({
-  image: {
-    width: "100%",
-    height: 200,
-    resizeMode: "contain",
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  modalContent: {
-    backgroundColor: "white",
-    padding: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 4,
-    borderColor: "rgba(0, 0, 0, 0.1)",
-  },
-  text: {
-    fontSize: 18,
-    marginBottom: 12,
-  },
-  input: {
-    height: 40,
-    width: "80%",
-    borderColor: "gray",
-    borderWidth: 1,
-    marginBottom: 20,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-  },
   container: {
     flex: 1,
     backgroundColor: "#f8f8f8",
     padding: 10,
-  },
-  scrollContainer: {
-    flexGrow: 1,
-  },
-  headerContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  headerText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  productContainer: {
-    flexDirection: "column",
-  },
-  productCard: {
-    marginBottom: 10,
   },
   card: {
     backgroundColor: "#fff",
@@ -499,18 +439,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 10,
   },
-  modalButton: {
-    padding: 10,
-    borderRadius: 30,
-    marginVertical: 5,
-    alignItems: "center",
-    width: "40%",
-  },
-  modalButtonText: {
-    color: "White",
-    fontSize: 17,
-    fontWeight: "bold",
-  },
   separator: {
     width: 0.1,
     backgroundColor: "#ccc",
@@ -531,17 +459,13 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginTop: 20,
     width: 100,
+    textAlign: "center",
+    borderRadius: 25,
+    overflow: "hidden",
   },
   actions: {
     flexDirection: "row",
     justifyContent: "flex-end",
-  },
-  fab: {
-    position: "absolute",
-    margin: 16,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#007bff",
   },
   modalContainer: {
     backgroundColor: "white",
@@ -549,6 +473,12 @@ const styles = StyleSheet.create({
     margin: 20,
     borderRadius: 10,
     elevation: 5,
+    flex: 1,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalTitle: {
     fontSize: 20,
@@ -556,19 +486,51 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
   },
+  label: {
+    alignSelf: "flex-start",
+    paddingLeft: "10%",
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
+  input: {
+    height: 40,
+    width: "80%",
+    borderColor: "gray",
+    borderWidth: 1,
+    marginBottom: 20,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  dropdown: {
+    width: "80%",
+    marginBottom: 20,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderColor: "gray",
+    borderWidth: 1,
+  },
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 20,
   },
+  button: {
+    padding: 10,
+    borderRadius: 30,
+    alignItems: "center",
+    width: "50%",
+    marginBottom:10
+  },
   saveButton: {
-    flex: 1,
-    marginRight: 10,
     backgroundColor: "#007bff",
   },
   cancelButton: {
-    flex: 1,
-    marginLeft: 10,
+    backgroundColor: "grey",
+  },
+  buttonText: {
+    color: "white",
+    fontSize: 17,
+    fontWeight: "bold",
   },
 });
 
